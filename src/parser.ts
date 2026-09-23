@@ -3,7 +3,7 @@ import { Token } from "./tokens.js";
 import {
   ASTNode,
   Select, Num, Str, Bool, Null, Identifier,
-  BinaryOp, CaseExpr, WhenClause, FunctionCall,
+  BinaryOp, UnaryOp, CaseExpr, WhenClause, FunctionCall,
   InExpr, NotInExpr, LikeExpr, NotLikeExpr,
   WhenClauseNode,
 } from "./ast.js";
@@ -243,6 +243,11 @@ class Parser {
   private parsePrimary(): ASTNode {
     const t = this.peek();
     if (!t) throw new DsqlexError("Unexpected end of input");
+
+    if (t.type === "operator" && t.value === "minus") {
+      this.consume();
+      return UnaryOp("minus", this.parsePrimary());
+    }
 
     if (t.type === "number") {
       this.consume();

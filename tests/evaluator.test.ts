@@ -3,7 +3,7 @@ import Decimal from "decimal.js";
 import { evaluateAST, DsqlexError } from "../src/index.js";
 import {
   Select, Num, Str, Bool, Null, Identifier,
-  BinaryOp, CaseExpr, WhenClause, FunctionCall,
+  BinaryOp, UnaryOp, CaseExpr, WhenClause, FunctionCall,
   InExpr, NotInExpr, LikeExpr, NotLikeExpr,
   ASTNode, WhenClauseNode,
 } from "../src/index.js";
@@ -643,5 +643,97 @@ describe("LIKE and NOT LIKE", () => {
 
   it("NOT LIKE match returns false", () => {
     expect(ev(sel(NotLikeExpr(ident("status"), s("%active%"))))).toBe(false);
+  });
+});
+
+describe("NULL propagation", () => {
+  it("null propagates through +, -, *, /", () => {
+    expect(ev(sel(binop("plus", ident("nullable_field"), num("1"))))).toBeNull();
+    expect(ev(sel(binop("minus", num("1"), ident("nullable_field"))))).toBeNull();
+    expect(ev(sel(binop("multiply", num("2"), ident("nullable_field"))))).toBeNull();
+    expect(ev(sel(binop("divide", ident("nullable_field"), num("2"))))).toBeNull();
+  });
+
+  it("ROUND returns null if value or precision is null", () => {
+    expect(ev(sel(call("round", [ident("nullable_field"), num("2")])))).toBeNull();
+    expect(ev(sel(call("round", [ident("x"), ident("nullable_field")])))).toBeNull();
+  });
+
+  it("ABS returns null for null", () => {
+    expect(ev(sel(call("abs", [ident("nullable_field")])))).toBeNull();
+  });
+});
+
+describe("LEAST / GREATEST", () => {
+  it("LEAST picks smallest", () => {
+    expect(ev(sel(call("least", [num("3"), num("1"), num("2")])))).toEqual(new Decimal("1"));
+  });
+
+  it("GREATEST picks largest", () => {
+    expect(ev(sel(call("greatest", [num("3"), num("1"), num("2")])))).toEqual(new Decimal("3"));
+  });
+
+  it("single argument", () => {
+    expect(ev(sel(call("least", [num("7")])))).toEqual(new Decimal("7"));
+  });
+
+  it("zero args is an error", () => {
+    expect(() => ev(sel(call("least", [])))).toThrow("at least one argument");
+    expect(() => ev(sel(call("greatest", [])))).toThrow("at least one argument");
+  });
+
+  it("returns null if any argument is null", () => {
+    expect(ev(sel(call("least", [num("1"), ident("nullable_field"), num("2")])))).toBeNull();
+    expect(ev(sel(call("greatest", [num("1"), ident("nullable_field")])))).toBeNull();
+  });
+
+  it("strings compare lexicographically", () => {
+    expect(ev(sel(call("least", [s("banana"), s("apple"), s("cherry")])))).toBe("apple");
+    expect(ev(sel(call("greatest", [s("banana"), s("apple"), s("cherry")])))).toBe("cherry");
+  });
+
+  it("preserves first on tie", () => {
+    const first = num("1");
+    expect(ev(sel(call("least", [first, num("1.0")])))).toEqual(new Decimal("1"));
+  });
+
+  it("compares Date values chronologically", () => {
+    const ctx: Context = {
+      a: new Date("2024-01-01T00:00:00Z"),
+      b: new Date("2023-06-15T00:00:00Z"),
+    };
+    expect(evaluateAST(sel(call("least", [ident("a"), ident("b")])), ctx))
+      .toEqual(new Date("2023-06-15T00:00:00Z"));
+    expect(evaluateAST(sel(call("greatest", [ident("a"), ident("b")])), ctx))
+      .toEqual(new Date("2024-01-01T00:00:00Z"));
+    expect(evaluateAST(sel(binop("gt", ident("a"), ident("b"))), ctx)).toBe(true);
+    expect(evaluateAST(sel(binop("lt", ident("a"), ident("b"))), ctx)).toBe(false);
+  });
+});
+
+describe("Unary minus", () => {
+  it("negates a number literal", () => {
+    expect(ev(sel(UnaryOp("minus", num("5"))))).toEqual(new Decimal("-5"));
+  });
+
+  it("negates a Decimal context value", () => {
+    expect(ev(sel(UnaryOp("minus", ident("x"))))).toEqual(new Decimal("-100.00"));
+  });
+
+  it("negates a nested arithmetic expression", () => {
+    expect(ev(sel(UnaryOp("minus", binop("plus", num("1"), num("2")))))).toEqual(new Decimal("-3"));
+  });
+
+  it("coerces integer values", () => {
+    expect(ev(sel(UnaryOp("minus", ident("group_id"))))).toEqual(new Decimal("-33"));
+  });
+
+  it("propagates null", () => {
+    expect(ev(sel(UnaryOp("minus", nul())))).toBeNull();
+    expect(ev(sel(UnaryOp("minus", ident("nullable_field"))))).toBeNull();
+  });
+
+  it("errors on non-numeric operand", () => {
+    expect(() => ev(sel(UnaryOp("minus", s("abc"))))).toThrow(DsqlexError);
   });
 });

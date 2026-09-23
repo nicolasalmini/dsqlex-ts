@@ -7,7 +7,7 @@ import {
 
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
 
-export type Value = Decimal | string | boolean | null | Value[];
+export type Value = Decimal | string | boolean | number | Date | null | Value[];
 
 export type Context = Record<string, unknown>;
 
@@ -67,6 +67,13 @@ function evalNode(node: ASTNode, ctx: Context, opts: EvalOptions): Value {
       const left = evalNode(node.left, ctx, opts);
       const right = evalNode(node.right, ctx, opts);
 
+      if (
+        (op === "plus" || op === "minus" || op === "multiply" || op === "divide") &&
+        (left === null || right === null)
+      ) {
+        return null;
+      }
+
       if (op === "plus") return toDecimal(left).plus(toDecimal(right));
       if (op === "minus") return toDecimal(left).minus(toDecimal(right));
       if (op === "multiply") return toDecimal(left).times(toDecimal(right));
@@ -81,6 +88,12 @@ function evalNode(node: ASTNode, ctx: Context, opts: EvalOptions): Value {
       if (op === "gte") return cmp === "gt" || cmp === "eq";
 
       throw new DsqlexError(`Unknown operator: ${op}`);
+    }
+
+    case "unary_op": {
+      const value = evalNode(node.operand, ctx, opts);
+      if (value === null) return null;
+      return toDecimal(value).neg();
     }
 
     case "case_expr": {
@@ -186,10 +199,12 @@ function evalFunction(node: FunctionCallNode, ctx: Context, opts: EvalOptions): 
 
   if (name === "round") {
     if (args.length !== 2) throw new DsqlexError("ROUND requires exactly 2 arguments");
-    const value = toDecimal(evalNode(args[0], ctx, opts));
-    const precision = toDecimal(evalNode(args[1], ctx, opts)).toNumber();
+    const value = evalNode(args[0], ctx, opts);
+    const precisionArg = evalNode(args[1], ctx, opts);
+    if (value === null || precisionArg === null) return null;
+    const precision = toDecimal(precisionArg).toNumber();
     if (!Number.isInteger(precision)) throw new DsqlexError("ROUND precision must be an integer");
-    return roundDecimal(value, precision);
+    return roundDecimal(toDecimal(value), precision);
   }
 
   if (name === "coalesce") {
@@ -212,11 +227,17 @@ function evalFunction(node: FunctionCallNode, ctx: Context, opts: EvalOptions): 
 
   if (name === "abs") {
     if (args.length !== 1) throw new DsqlexError("ABS requires exactly 1 argument");
-    return toDecimal(evalNode(args[0], ctx, opts)).abs();
+    const value = evalNode(args[0], ctx, opts);
+    if (value === null) return null;
+    return toDecimal(value).abs();
   }
 
   if (name === "concat") {
     return args.map(arg => String(evalNode(arg, ctx, opts))).join("");
+  }
+
+  if (name === "least" || name === "greatest") {
+    return pickExtreme(name, args, ctx, opts);
   }
 
   if (name === "event") {
@@ -295,6 +316,25 @@ function resolveEvent(type: string, subtype: string, ctx: Context, opts: EvalOpt
 // Helpers
 // ---------------------------------------------------------------------------
 
+function pickExtreme(
+  kind: "least" | "greatest",
+  args: readonly ASTNode[],
+  ctx: Context,
+  opts: EvalOptions,
+): Value {
+  if (args.length === 0) {
+    throw new DsqlexError("LEAST/GREATEST requires at least one argument");
+  }
+  const values = args.map(arg => evalNode(arg, ctx, opts));
+  if (values.some(v => v === null)) return null;
+  const target: CmpResult = kind === "least" ? "lt" : "gt";
+  let best = values[0];
+  for (const value of values.slice(1)) {
+    if (compare(value, best) === target) best = value;
+  }
+  return best;
+}
+
 function isTruthy(value: Value): boolean {
   return value !== null && value !== false;
 }
@@ -329,6 +369,13 @@ function compare(a: Value, b: Value): CmpResult {
     } catch {
       // fall through to generic
     }
+  }
+
+  if (a instanceof Date && b instanceof Date) {
+    const at = a.getTime();
+    const bt = b.getTime();
+    if (at === bt) return "eq";
+    return at < bt ? "lt" : "gt";
   }
 
   if (a === b) return "eq";

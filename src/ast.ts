@@ -6,6 +6,7 @@ export type ASTNode =
   | NullNode
   | IdentifierNode
   | BinaryOpNode
+  | UnaryOpNode
   | CaseExprNode
   | WhenClauseNode
   | FunctionCallNode
@@ -53,6 +54,14 @@ export interface BinaryOpNode {
   readonly op: BinaryOp;
   readonly left: ASTNode;
   readonly right: ASTNode;
+}
+
+export type UnaryOp = "minus";
+
+export interface UnaryOpNode {
+  readonly kind: "unary_op";
+  readonly op: UnaryOp;
+  readonly operand: ASTNode;
 }
 
 export interface CaseExprNode {
@@ -106,6 +115,9 @@ export const Null = (): NullNode => ({ kind: "null" });
 export const Identifier = (name: string): IdentifierNode => ({ kind: "identifier", name });
 export const BinaryOp = (op: BinaryOp, left: ASTNode, right: ASTNode): BinaryOpNode => ({
   kind: "binary_op", op, left, right,
+});
+export const UnaryOp = (op: UnaryOp, operand: ASTNode): UnaryOpNode => ({
+  kind: "unary_op", op, operand,
 });
 export const CaseExpr = (
   whenClauses: readonly WhenClauseNode[],

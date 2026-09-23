@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { parse, DsqlexError } from "../src/index.js";
 import {
   Select, Num, Str, Bool, Null, Identifier,
-  BinaryOp, CaseExpr, WhenClause, FunctionCall,
+  BinaryOp, UnaryOp, CaseExpr, WhenClause, FunctionCall,
   InExpr, NotInExpr, LikeExpr, NotLikeExpr,
   BinaryOpNode, CaseExprNode, WhenClauseNode, FunctionCallNode, InExprNode,
 } from "../src/index.js";
@@ -419,5 +419,68 @@ describe("LIKE and NOT LIKE", () => {
 describe("Error handling", () => {
   it("rejects unexpected tokens after expression", () => {
     expect(() => parse("SELECT 1 2")).toThrow("Unexpected tokens");
+  });
+});
+
+describe("LEAST / GREATEST", () => {
+  it("parses LEAST with multiple arguments", () => {
+    expect(parse("SELECT LEAST(a, 1, 2)")).toEqual(
+      Select(FunctionCall("least", [Identifier("a"), Num("1"), Num("2")])),
+    );
+  });
+
+  it("parses GREATEST", () => {
+    const ast = parse("GREATEST(x, y)");
+    const expr = (ast as any).expr as FunctionCallNode;
+    expect(expr.name).toBe("greatest");
+    expect(expr.args).toEqual([Identifier("x"), Identifier("y")]);
+  });
+
+  it("parses identifier with trailing question mark", () => {
+    expect(parse("SELECT active?")).toEqual(Select(Identifier("active?")));
+  });
+});
+
+describe("Unary minus", () => {
+  it("parses unary minus on a literal", () => {
+    expect(parse("SELECT -1")).toEqual(Select(UnaryOp("minus", Num("1"))));
+  });
+
+  it("parses unary minus on the right side of multiplication", () => {
+    expect(parse("SELECT amount * -1")).toEqual(
+      Select(BinaryOp("multiply", Identifier("amount"), UnaryOp("minus", Num("1")))),
+    );
+  });
+
+  it("parses unary minus on a parenthesized expression", () => {
+    expect(parse("SELECT -(1 + 2)")).toEqual(
+      Select(UnaryOp("minus", BinaryOp("plus", Num("1"), Num("2")))),
+    );
+  });
+
+  it("parses subtraction of a negated operand", () => {
+    expect(parse("SELECT 5 - - 2")).toEqual(
+      Select(BinaryOp("minus", Num("5"), UnaryOp("minus", Num("2")))),
+    );
+  });
+
+  it("parses nested unary minus", () => {
+    expect(parse("SELECT - -5")).toEqual(
+      Select(UnaryOp("minus", UnaryOp("minus", Num("5")))),
+    );
+  });
+
+  it("double dash is a comment, not unary", () => {
+    expect(() => parse("SELECT --5")).toThrow(DsqlexError);
+  });
+
+  it("parses unary minus in IN list items", () => {
+    expect(parse("x IN (1, -2)")).toEqual(
+      Select(InExpr(Identifier("x"), [Num("1"), UnaryOp("minus", Num("2"))])),
+    );
+  });
+
+  it("rejects mixing additive and multiplicative with a negated operand", () => {
+    expect(() => parse("SELECT 1 + 2 * -3")).toThrow("Ambiguous expression");
   });
 });

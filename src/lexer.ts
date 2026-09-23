@@ -24,6 +24,8 @@ const WORD_MAP: Record<string, [Token["type"], string]> = {
   NVL:      ["function", "coalesce"],
   ABS:      ["function", "abs"],
   CONCAT:   ["function", "concat"],
+  LEAST:    ["function", "least"],
+  GREATEST: ["function", "greatest"],
   EVENT:    ["function", "event"],
 };
 
@@ -118,6 +120,7 @@ export function tokenize(expr: string): Token[] {
         i++; // consume '.'
         while (i < n && (isAsciiAlnum(expr[i]) || expr[i] === "_")) i++;
       }
+      if (i < n && expr[i] === "?") i++;
       const word = expr.slice(start, i);
       const upper = word.toUpperCase();
       if (!word.includes(".") && upper in WORD_MAP) {

@@ -403,3 +403,33 @@ describe("Error messages", () => {
     expect(() => tokenize("ô")).toThrow("Unexpected character: 'ô'");
   });
 });
+
+describe("Trailing '?' in identifiers", () => {
+  it("identifier with trailing question mark", () => {
+    expect(tokenize("active?")).toEqual([tok("identifier", "active?")]);
+  });
+
+  it("trailing question mark on dotted identifier", () => {
+    expect(tokenize("user.active?")).toEqual([tok("identifier", "user.active?")]);
+  });
+
+  it("question mark does not classify as keyword", () => {
+    expect(tokenize("select?")).toEqual([tok("identifier", "select?")]);
+  });
+
+  it("double question mark is an error", () => {
+    expect(() => tokenize("active??")).toThrow("Unexpected character");
+  });
+});
+
+describe("LEAST / GREATEST function tokens", () => {
+  it("LEAST and GREATEST are functions", () => {
+    expect(tokenize("LEAST")).toEqual([tok("function", "least")]);
+    expect(tokenize("GREATEST")).toEqual([tok("function", "greatest")]);
+  });
+
+  it("case-insensitive", () => {
+    expect(tokenize("least")).toEqual([tok("function", "least")]);
+    expect(tokenize("Greatest")).toEqual([tok("function", "greatest")]);
+  });
+});

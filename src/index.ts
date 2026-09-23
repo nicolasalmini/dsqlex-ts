@@ -6,10 +6,10 @@ import { Token } from "./tokens.js";
 import {
   ASTNode,
   SelectNode, NumberNode, StringNode, BooleanNode, NullNode, IdentifierNode,
-  BinaryOpNode, CaseExprNode, WhenClauseNode, FunctionCallNode,
+  BinaryOpNode, UnaryOpNode, CaseExprNode, WhenClauseNode, FunctionCallNode,
   InExprNode, NotInExprNode, LikeExprNode, NotLikeExprNode,
   Select, Num, Str, Bool, Null, Identifier,
-  BinaryOp, CaseExpr, WhenClause, FunctionCall,
+  BinaryOp, UnaryOp, CaseExpr, WhenClause, FunctionCall,
   InExpr, NotInExpr, LikeExpr, NotLikeExpr,
 } from "./ast.js";
 
@@ -18,13 +18,13 @@ export { Token };
 export type {
   ASTNode,
   SelectNode, NumberNode, StringNode, BooleanNode, NullNode, IdentifierNode,
-  BinaryOpNode, CaseExprNode, WhenClauseNode, FunctionCallNode,
+  BinaryOpNode, UnaryOpNode, CaseExprNode, WhenClauseNode, FunctionCallNode,
   InExprNode, NotInExprNode, LikeExprNode, NotLikeExprNode,
   Value, Context, EvalOptions,
 };
 export {
   Select, Num, Str, Bool, Null, Identifier,
-  BinaryOp, CaseExpr, WhenClause, FunctionCall,
+  BinaryOp, UnaryOp, CaseExpr, WhenClause, FunctionCall,
   InExpr, NotInExpr, LikeExpr, NotLikeExpr,
 };
 

@@ -571,3 +571,61 @@ describe("LIKE operator", () => {
     expect(run("category IN ('A', 'B') AND label LIKE '%world%'")).toBe(true);
   });
 });
+
+describe("NULL propagation and LEAST/GREATEST end-to-end", () => {
+  it("null propagates through arithmetic", () => {
+    expect(run("SELECT bonus + 1")).toBeNull();
+    expect(run("SELECT price * bonus")).toBeNull();
+  });
+
+  it("ROUND and ABS with null", () => {
+    expect(run("SELECT ROUND(bonus, 2)")).toBeNull();
+    expect(run("SELECT ABS(bonus)")).toBeNull();
+  });
+
+  it("LEAST and GREATEST", () => {
+    expect(run("SELECT LEAST(price, quantity, rate)")).toEqual(new Decimal("5.00"));
+    expect(run("SELECT GREATEST(price, quantity, rate)")).toEqual(new Decimal("500.00"));
+  });
+
+  it("LEAST with null propagates", () => {
+    expect(run("SELECT LEAST(price, bonus)")).toBeNull();
+  });
+
+  it("question-mark identifier resolves from context", () => {
+    expect(run("SELECT eligible?", { "eligible?": true })).toBe(true);
+  });
+});
+
+describe("Unary minus end-to-end", () => {
+  it("negated literal", () => {
+    expect(run("SELECT -2.5")).toEqual(new Decimal("-2.5"));
+  });
+
+  it("negated field", () => {
+    expect(run("SELECT -price")).toEqual(new Decimal("-500.00"));
+  });
+
+  it("multiplication by negative literal", () => {
+    expect(run("SELECT price * -1")).toEqual(new Decimal("-500.00"));
+  });
+
+  it("negated parenthesized expression", () => {
+    expect(run("SELECT -(1 + 2)")).toEqual(new Decimal("-3"));
+  });
+
+  it("subtraction of a negated operand", () => {
+    expect(run("SELECT 5 - - 2")).toEqual(new Decimal("7"));
+  });
+
+  it("negative value in IN list", () => {
+    const context: Context = { balance: new Decimal("-42") };
+    expect(run("balance IN (-42, 0)", context)).toBe(true);
+    expect(run("balance IN (-41, 0)", context)).toBe(false);
+  });
+
+  it("negating NULL returns null", () => {
+    expect(run("SELECT -bonus")).toBeNull();
+    expect(run("SELECT -NULL")).toBeNull();
+  });
+});
